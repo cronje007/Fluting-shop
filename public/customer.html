@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Customer Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="customer">
+  <header class="site-header">
+    <h1>Customer Dashboard</h1>
+    <p class="subtitle">Approve, reject, and track rolls</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Queue Position</h2>
+      <p>Rolls in process in front of you: <span id="customer-queue">0</span></p>
+    </section>
+
+    <section class="card">
+      <h2>Approval Needed</h2>
+      <div class="panel">
+        <label>Roll ID <input id="customer-roll-id" placeholder="Scan or enter Roll ID" /></label>
+        <label>Priority
+          <select id="customer-priority">
+            <option value="A">Priority A</option>
+            <option value="B">Priority B</option>
+          </select>
+        </label>
+        <label>Incorrect Info Notes <textarea id="customer-reject-note"></textarea></label>
+        <div class="button-row">
+          <button class="primary" id="approve-roll">Approve</button>
+          <button class="danger" id="reject-incorrect">Reject: Incorrect Info</button>
+          <button class="danger" id="reject-scrap">Reject: Scrap Roll</button>
+        </div>
+        <p class="helper">Scrap requires double confirmation before status becomes SCRAPPED.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Rolls In Progress</h2>
+      <div class="panel">
+        <label>Lookup Roll ID <input id="customer-lookup" /></label>
+        <button id="customer-lookup-btn">View Details</button>
+        <div class="info-box" id="customer-roll-details">
+          Status and uploaded files appear here.
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

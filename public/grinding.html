@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Grinding Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="grinding">
+  <header class="site-header">
+    <h1>Grinding</h1>
+    <p class="subtitle">Process approved rolls in FIFO/priority order</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Queue</h2>
+      <div class="panel">
+        <p>Next roll is determined by Priority A → B, then oldest check-in.</p>
+        <button id="grinding-new">New Roll for Grinding</button>
+        <label>Scan Roll ID <input id="grinding-scan" /></label>
+        <button id="grinding-done">Roll Done</button>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fluting Shop Workflow</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="login">
+  <header class="site-header">
+    <h1>Fluting Shop Workflow</h1>
+    <p class="subtitle">Role-based roll tracking, approvals, and production queues</p>
+  </header>
+
+  <main>
+    <section class="card" id="login-card">
+      <h2>Login</h2>
+      <div class="login-options">
+        <div>
+          <h3>Customer Login</h3>
+          <label>Email
+            <input type="email" id="customer-email" />
+          </label>
+          <label>Password
+            <input type="password" id="customer-password" />
+          </label>
+          <button class="primary" id="customer-login">Login as Customer</button>
+        </div>
+        <div>
+          <h3>Employee Login</h3>
+          <label>Role
+            <select id="employee-role">
+              <option value="roll-checkin">Roll Check-in</option>
+              <option value="controller">Controller</option>
+              <option value="grinding">Grinding</option>
+              <option value="fluting">Fluting</option>
+              <option value="frosting">Frosting</option>
+              <option value="crating">Crating &amp; Checking</option>
+              <option value="delivery">Delivery</option>
+              <option value="admin">Admin</option>
+            </select>
+          </label>
+          <label>Email
+            <input type="email" id="employee-email" />
+          </label>
+          <label>Password
+            <input type="password" id="employee-password" />
+          </label>
+          <button class="primary" id="employee-login">Login as Employee</button>
+        </div>
+      </div>
+      <p class="helper">Configure Supabase credentials in <code>public/app.js</code>.</p>
+    </section>
+
+    <section class="card">
+      <h2>Quick Links (for local testing)</h2>
+      <ul class="link-list">
+        <li><a href="customer.html">Customer Dashboard</a></li>
+        <li><a href="roll-checkin.html">Roll Check-in</a></li>
+        <li><a href="controller.html">Controller</a></li>
+        <li><a href="grinding.html">Grinding</a></li>
+        <li><a href="fluting.html">Fluting</a></li>
+        <li><a href="frosting.html">Frosting</a></li>
+        <li><a href="crating.html">Crating &amp; Checking</a></li>
+        <li><a href="delivery.html">Delivery</a></li>
+        <li><a href="admin.html">Admin</a></li>
+      </ul>
+    </section>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

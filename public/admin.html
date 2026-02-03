@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="admin">
+  <header class="site-header">
+    <h1>Admin</h1>
+    <p class="subtitle">Manage customers, track rolls, and review analytics</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Roll Tracking</h2>
+      <div class="panel">
+        <label>Track Roll ID <input id="admin-roll-id" /></label>
+        <button id="admin-track">Track Roll</button>
+        <div class="info-box" id="admin-roll-details">Status details appear here.</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Customer Views</h2>
+      <div class="panel">
+        <label>Customer (Mill Name) <input id="admin-customer" /></label>
+        <button id="admin-view-customer">View Customer Dashboard</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Analytics</h2>
+      <div class="panel">
+        <p>Average turnaround time: <span id="metric-average">--</span></p>
+        <p>Longest turnaround: <span id="metric-longest">--</span></p>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
