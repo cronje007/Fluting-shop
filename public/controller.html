@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Controller Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="controller">
+  <header class="site-header">
+    <div class="header-brand">
+      <img src="MSS.svg" alt="MSS logo" class="logo" />
+      <div>
+        <h1>Controller Dashboard</h1>
+        <p class="subtitle">Inspect rolls and request customer approval</p>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Inspection</h2>
+      <div class="panel">
+        <label>Scan Roll ID <input id="controller-scan" placeholder="Scan barcode" /></label>
+        <label>Condition Notes <textarea id="controller-notes"></textarea></label>
+        <label>Diameter <input id="controller-diameter" type="number" step="0.01" /></label>
+        <label>Visible Cracks <input id="controller-cracks" type="checkbox" /></label>
+        <label>Crack Notes <textarea id="controller-crack-notes"></textarea></label>
+        <label>Optical Test (PDF/Image) <input type="file" id="controller-optical" /></label>
+        <label>Price Quote <input id="controller-quote" type="number" step="0.01" /></label>
+        <label>Fluting Specs <textarea id="controller-fluting"></textarea></label>
+        <label>Frosting Specs <textarea id="controller-frosting"></textarea></label>
+        <button id="send-approval">Send Approval Request</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Rejected / Scrapped</h2>
+      <div class="panel">
+        <label>Lookup Roll ID <input id="controller-lookup" /></label>
+        <button id="controller-lookup-btn">View Status</button>
+        <div class="info-box" id="controller-status">
+          Rejected/scrapped details show here.
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
