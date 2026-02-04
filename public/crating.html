@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Crating & Checking</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="crating">
+  <header class="site-header">
+    <div class="header-brand">
+      <img src="MSS.svg" alt="MSS logo" class="logo" />
+      <div>
+        <h1>Crating &amp; Checking</h1>
+        <p class="subtitle">Final inspection and optical test upload</p>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Ready for Delivery</h2>
+      <div class="panel">
+        <label>Scan Roll ID <input id="crating-scan" /></label>
+        <label>Optical Test (PDF) <input type="file" id="crating-optical" /></label>
+        <button id="crating-ready">Mark Ready for Delivery</button>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

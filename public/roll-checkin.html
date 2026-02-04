@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Roll Check-in</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="roll-checkin">
+  <header class="site-header">
+    <div class="header-brand">
+      <img src="MSS.svg" alt="MSS logo" class="logo" />
+      <div>
+        <h1>Roll Check-in</h1>
+        <p class="subtitle">Create rolls, attach photos, print barcodes</p>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>New Roll</h2>
+      <div class="panel">
+        <label>Roll ID <input id="checkin-roll-id" /></label>
+        <label>Mill Name <input id="checkin-mill" /></label>
+        <label>Date Received <input type="date" id="checkin-date" /></label>
+        <label>
+          <input type="checkbox" id="checkin-fluting" /> Fluting Required
+        </label>
+        <label>
+          <input type="checkbox" id="checkin-frosting" /> Frosting Required
+        </label>
+        <label>Photos <input type="file" id="checkin-photos" multiple /></label>
+        <div class="button-row">
+          <button id="create-roll">Create Roll</button>
+          <button id="print-barcode">Print Barcode</button>
+        </div>
+        <svg id="barcode"></svg>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
