@@ -72,3 +72,22 @@ If you see `new row violates row-level security policy for table \"rolls\"` when
 - Rolls in `SCRAPPED` are read-only for all roles.
 - Queue ordering uses Priority A → Priority B, then oldest `checked_in_at` first.
 - Only `APPROVED` rolls enter production queues.
+
+
+## One-section SQL for existing projects
+
+If your project already exists and you only need the latest workflow/RLS fixes, run:
+
+- `sql/existing_project_patch.sql`
+
+(Equivalent copy: `NEW SQL/existing_project_patch.sql`)
+
+This single script includes transition trigger enforcement + status-history trigger refresh + RLS helper functions + required roll update policies.
+
+
+## 9) Roll ID Counter (Admin + Check-in)
+- Admin can set the next generated roll number from the Admin dashboard.
+- Roll Check-in can click **Generate New Unique ID** to get the next ID from SQL function `next_roll_id()` (auto increments).
+- If a typed Roll ID already exists, check-in is prompted to create a rework ID (`<ROLL_ID>-R1`, `-R2`, ...).
+
+- Rolls now support optional `roll_name` (e.g. `B1`) shown alongside unique `roll_id` across queues.
