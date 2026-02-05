@@ -22,6 +22,7 @@ const elements = {
   customerStageQueues: document.getElementById("customer-stage-queues"),
   customerAwaitingList: document.getElementById("customer-awaiting-list"),
   customerRollDetails: document.getElementById("customer-roll-details"),
+  customerOpticalFiles: document.getElementById("customer-optical-files"),
   approveRoll: document.getElementById("approve-roll"),
   rejectIncorrect: document.getElementById("reject-incorrect"),
   rejectScrap: document.getElementById("reject-scrap"),
@@ -141,11 +142,65 @@ const fetchCustomerRolls = async () => {
 const fetchAwaitingCustomerRolls = async () => {
   const { data, error } = await supabase
     .from("rolls")
-    .select("roll_id,roll_name,mill_name,status,checked_in_at,controller_notes,diameter,visible_cracks,cracks_notes,price_quote,fluting_specs,frosting_specs")
+    .select("id,roll_id,roll_name,mill_name,status,checked_in_at,controller_notes,diameter,visible_cracks,cracks_notes,price_quote,fluting_specs,frosting_specs")
     .eq("status", "AWAITING_CUSTOMER_APPROVAL")
     .order("checked_in_at", { ascending: true });
   if (error) throw error;
   return data ?? [];
+};
+
+const fetchRollOpticalFiles = async (rollId) => {
+  const { data, error } = await supabase
+    .from("roll_files")
+    .select("file_path")
+    .eq("file_type", "OPTICAL_TEST")
+    .eq("roll_id", rollId)
+    .order("uploaded_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+};
+
+const fileLinkFromPath = (filePath) => {
+  if (!filePath) return "";
+  if (filePath.startsWith("http://") || filePath.startsWith("https://")) return filePath;
+  const { data } = supabase.storage.from("optical-tests").getPublicUrl(filePath);
+  return data?.publicUrl || filePath;
+};
+
+const renderCustomerOpticalFiles = async (roll) => {
+  if (!elements.customerOpticalFiles) return;
+  elements.customerOpticalFiles.innerHTML = "";
+  if (!roll) {
+    const li = document.createElement("li");
+    li.textContent = "Select a roll to view optical tests.";
+    elements.customerOpticalFiles.appendChild(li);
+    return;
+  }
+
+  try {
+    const files = await fetchRollOpticalFiles(roll.id);
+    if (!files.length) {
+      const li = document.createElement("li");
+      li.textContent = "No optical test files uploaded yet.";
+      elements.customerOpticalFiles.appendChild(li);
+      return;
+    }
+
+    files.forEach((file, idx) => {
+      const li = document.createElement("li");
+      const a = document.createElement("a");
+      a.href = fileLinkFromPath(file.file_path);
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = `Open Optical Test ${idx + 1}`;
+      li.appendChild(a);
+      elements.customerOpticalFiles.appendChild(li);
+    });
+  } catch (error) {
+    const li = document.createElement("li");
+    li.textContent = `Unable to load optical test files: ${error.message}`;
+    elements.customerOpticalFiles.appendChild(li);
+  }
 };
 
 const fetchQueueCount = async () => {
@@ -194,10 +249,11 @@ const getReworkRollId = async (baseRollId) => {
   return `${baseRollId}-R${next}`;
 };
 
-const renderCustomerSelectedRollDetails = (roll) => {
+const renderCustomerSelectedRollDetails = async (roll) => {
   if (!elements.customerRollDetails) return;
   if (!roll) {
     elements.customerRollDetails.textContent = "Click a roll above, then review details and approve/reject.";
+    await renderCustomerOpticalFiles(null);
     return;
   }
 
@@ -212,6 +268,8 @@ const renderCustomerSelectedRollDetails = (roll) => {
     Fluting Specs: ${roll.fluting_specs ?? "--"}<br/>
     Frosting Specs: ${roll.frosting_specs ?? "--"}
   `;
+
+  await renderCustomerOpticalFiles(roll);
 };
 
 const refreshCustomerApprovalList = async () => {
@@ -224,7 +282,7 @@ const refreshCustomerApprovalList = async () => {
     li.textContent = "No rolls waiting for approval.";
     elements.customerAwaitingList.appendChild(li);
     selectedCustomerRollId = null;
-    renderCustomerSelectedRollDetails(null);
+    await renderCustomerSelectedRollDetails(null);
     return;
   }
 
@@ -235,9 +293,9 @@ const refreshCustomerApprovalList = async () => {
     const btn = document.createElement("button");
     btn.textContent = "Show Roll Details";
     btn.type = "button";
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
       selectedCustomerRollId = roll.roll_id;
-      renderCustomerSelectedRollDetails(roll);
+      await renderCustomerSelectedRollDetails(roll);
     });
 
     li.appendChild(document.createTextNode(" "));
@@ -247,7 +305,7 @@ const refreshCustomerApprovalList = async () => {
 
   if (!selectedCustomerRollId && rolls[0]) {
     selectedCustomerRollId = rolls[0].roll_id;
-    renderCustomerSelectedRollDetails(rolls[0]);
+    await renderCustomerSelectedRollDetails(rolls[0]);
   }
 };
 
