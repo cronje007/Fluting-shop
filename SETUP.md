@@ -83,3 +83,9 @@ If your project already exists and you only need the latest workflow/RLS fixes, 
 (Equivalent copy: `NEW SQL/existing_project_patch.sql`)
 
 This single script includes transition trigger enforcement + status-history trigger refresh + RLS helper functions + required roll update policies.
+
+
+## 9) Roll ID Counter (Admin + Check-in)
+- Admin can set the next generated roll number from the Admin dashboard.
+- Roll Check-in can click **Generate New Unique ID** to get the next ID from SQL function `next_roll_id()` (auto increments).
+- If a typed Roll ID already exists, check-in is prompted to create a rework ID (`<ROLL_ID>-R1`, `-R2`, ...).

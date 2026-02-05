@@ -79,6 +79,17 @@ create index rolls_status_idx on rolls(status);
 create index rolls_priority_checked_in_idx on rolls(priority, checked_in_at);
 create index rolls_mill_name_idx on rolls(mill_name);
 
+
+create table if not exists roll_id_settings (
+  id integer primary key default 1 check (id = 1),
+  next_value bigint not null default 1000,
+  prefix text not null default 'R'
+);
+
+insert into roll_id_settings (id, next_value, prefix)
+values (1, 1000, 'R')
+on conflict (id) do nothing;
+
 create table roll_files (
   id uuid primary key default gen_random_uuid(),
   roll_id uuid not null references rolls(id) on delete cascade,

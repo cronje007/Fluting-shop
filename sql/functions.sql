@@ -104,3 +104,60 @@ create trigger rolls_enforce_status_transition
 before update of status on rolls
 for each row
 execute function enforce_roll_status_transition();
+
+
+create or replace function next_roll_id()
+returns text as $$
+declare
+  v_prefix text;
+  v_next bigint;
+begin
+  if not exists (
+    select 1 from employees
+    where auth_user_id = auth.uid()
+      and role in ('ROLL_CHECKIN', 'ADMIN')
+  ) then
+    raise exception 'Only Roll Check-in or Admin can generate new roll IDs';
+  end if;
+
+  update roll_id_settings
+  set next_value = next_value + 1
+  where id = 1
+  returning prefix, next_value - 1 into v_prefix, v_next;
+
+  if v_prefix is null then
+    insert into roll_id_settings (id, next_value, prefix)
+    values (1, 1001, 'R')
+    on conflict (id) do update set next_value = roll_id_settings.next_value + 1
+    returning prefix, next_value - 1 into v_prefix, v_next;
+  end if;
+
+  return v_prefix || lpad(v_next::text, 6, '0');
+end;
+$$ language plpgsql security definer;
+
+create or replace function set_roll_id_counter(p_value bigint)
+returns void as $$
+begin
+  if not exists (
+    select 1 from employees
+    where auth_user_id = auth.uid()
+      and role = 'ADMIN'
+  ) then
+    raise exception 'Only Admin can update roll ID counter';
+  end if;
+
+  if p_value < 1 then
+    raise exception 'Counter must be >= 1';
+  end if;
+
+  insert into roll_id_settings (id, next_value, prefix)
+  values (1, p_value, 'R')
+  on conflict (id) do update set next_value = excluded.next_value;
+end;
+$$ language plpgsql security definer;
+
+create or replace function get_current_roll_id_counter()
+returns bigint as $$
+  select next_value from roll_id_settings where id = 1;
+$$ language sql stable security definer;
