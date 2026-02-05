@@ -72,3 +72,14 @@ If you see `new row violates row-level security policy for table \"rolls\"` when
 - Rolls in `SCRAPPED` are read-only for all roles.
 - Queue ordering uses Priority A → Priority B, then oldest `checked_in_at` first.
 - Only `APPROVED` rolls enter production queues.
+
+
+## One-section SQL for existing projects
+
+If your project already exists and you only need the latest workflow/RLS fixes, run:
+
+- `sql/existing_project_patch.sql`
+
+(Equivalent copy: `NEW SQL/existing_project_patch.sql`)
+
+This single script includes transition trigger enforcement + status-history trigger refresh + RLS helper functions + required roll update policies.
