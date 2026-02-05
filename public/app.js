@@ -18,6 +18,7 @@ const elements = {
   checkinGenerateId: document.getElementById("checkin-generate-id"),
   createRoll: document.getElementById("create-roll"),
   sendApproval: document.getElementById("send-approval"),
+  controllerRollName: document.getElementById("controller-roll-name"),
   customerQueue: document.getElementById("customer-queue"),
   customerStageQueues: document.getElementById("customer-stage-queues"),
   customerAwaitingList: document.getElementById("customer-awaiting-list"),
@@ -99,31 +100,37 @@ const fetchStageQueue = async (statuses) => {
   return sortQueue(data ?? []);
 };
 
+const renderTable = (target, columns, rows) => {
+  if (!target) return;
+  if (!rows.length) {
+    target.innerHTML = '<p class="helper">No rolls in queue.</p>';
+    return;
+  }
+  const header = columns.map((c) => `<th>${c}</th>`).join("");
+  const body = rows
+    .map((row) => `<tr>${row.map((cell) => `<td>${cell ?? "--"}</td>`).join("")}</tr>`)
+    .join("");
+  target.innerHTML = `<table class="queue-table"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table>`;
+};
+
 const renderQueue = async (statuses, target, onSelect) => {
   if (!target) return;
   const queue = await fetchStageQueue(statuses);
-  target.innerHTML = "";
-  if (!queue.length) {
-    const li = document.createElement("li");
-    li.textContent = "No rolls in queue.";
-    target.appendChild(li);
-    return;
+  const rows = queue.map((roll, idx) => [idx + 1, roll.roll_id, roll.mill_name, roll.roll_name ?? "--", roll.priority ?? "B", roll.status]);
+  renderTable(target, ["#", "ROLL ID", "MILL NAME", "ROLL NAME", "PRIORITY", "STATUS"], rows);
+
+  if (onSelect && queue.length) {
+    target.querySelectorAll("tbody tr").forEach((tr, idx) => {
+      tr.style.cursor = "pointer";
+      tr.addEventListener("click", () => onSelect(queue[idx]));
+    });
   }
-  queue.forEach((roll, idx) => {
-    const li = document.createElement("li");
-    li.textContent = `${idx + 1}. ${rollLabel(roll)} — ${roll.mill_name} — Priority ${roll.priority ?? "B"} — ${roll.status}`;
-    if (onSelect) {
-      li.style.cursor = "pointer";
-      li.addEventListener("click", () => onSelect(roll));
-    }
-    target.appendChild(li);
-  });
 };
 
 const requireNextQueueRoll = async (rollId, statuses, expected) => {
   const queue = await fetchStageQueue(statuses);
   if (!queue.length) throw new Error("No rolls are currently eligible in this queue.");
-  if (queue[0].roll_id !== rollId) throw new Error(`Roll ${rollId} is not next. Next is ${queue[0].roll_id}.`);
+  if (queue[0].roll_id !== rollId) throw new Error(`FIFO BLOCKED: Roll ${rollId} cannot proceed. Next roll is ${queue[0].roll_id} from ${queue[0].mill_name} with name ${queue[0].roll_name ?? "--"}.`);
   const current = await fetchRollById(rollId);
   if (!current) throw new Error("Roll not found.");
   if (current.status !== expected) throw new Error(`Roll ${rollId} must be ${expected}.`);
@@ -205,9 +212,23 @@ const renderCustomerOpticalFiles = async (roll) => {
 
 const fetchQueueCount = async () => {
   const statuses = ["APPROVED", "GRINDING", "GRINDING_DONE", "FLUTING", "FROSTING", "FLUTING_DONE", "FROSTING_DONE", "CRATING_CHECKING", "READY_FOR_DELIVERY"];
-  const { data, error } = await supabase.from("rolls").select("id").in("status", statuses);
-  if (error) return 0;
-  return data?.length ?? 0;
+  const { data: authData } = await supabase.auth.getUser();
+  const uid = authData?.user?.id;
+  if (!uid) return 0;
+
+  const { data: customer } = await supabase.from("customers").select("id").eq("auth_user_id", uid).maybeSingle();
+  if (!customer) return 0;
+
+  const { data, error } = await supabase
+    .from("rolls")
+    .select("roll_id,customer_id,priority,checked_in_at,status")
+    .in("status", statuses);
+  if (error || !data) return 0;
+
+  const sorted = sortQueue(data);
+  const firstOwnIndex = sorted.findIndex((r) => r.customer_id === customer.id);
+  if (firstOwnIndex < 0) return 0;
+  return sorted.slice(0, firstOwnIndex).filter((r) => r.customer_id !== customer.id).length;
 };
 
 const handleLogin = async (email, password) => {
@@ -275,32 +296,23 @@ const renderCustomerSelectedRollDetails = async (roll) => {
 const refreshCustomerApprovalList = async () => {
   if (!elements.customerAwaitingList) return;
   const rolls = await fetchAwaitingCustomerRolls();
-  elements.customerAwaitingList.innerHTML = "";
 
   if (!rolls.length) {
-    const li = document.createElement("li");
-    li.textContent = "No rolls waiting for approval.";
-    elements.customerAwaitingList.appendChild(li);
+    elements.customerAwaitingList.innerHTML = '<p class="helper">No rolls waiting for approval.</p>';
     selectedCustomerRollId = null;
     await renderCustomerSelectedRollDetails(null);
     return;
   }
 
-  rolls.forEach((roll) => {
-    const li = document.createElement("li");
-    li.textContent = `${rollLabel(roll)} — ${roll.mill_name} `;
+  const rows = rolls.map((roll) => [roll.roll_id, roll.mill_name, roll.roll_name ?? "--", '<button type="button">See Roll Details</button>']);
+  renderTable(elements.customerAwaitingList, ["ROLL ID", "MILL NAME", "ROLL NAME", "ACTION"], rows);
 
-    const btn = document.createElement("button");
-    btn.textContent = "Show Roll Details";
-    btn.type = "button";
-    btn.addEventListener("click", async () => {
+  elements.customerAwaitingList.querySelectorAll("tbody tr").forEach((tr, idx) => {
+    tr.querySelector("button")?.addEventListener("click", async () => {
+      const roll = rolls[idx];
       selectedCustomerRollId = roll.roll_id;
       await renderCustomerSelectedRollDetails(roll);
     });
-
-    li.appendChild(document.createTextNode(" "));
-    li.appendChild(btn);
-    elements.customerAwaitingList.appendChild(li);
   });
 
   if (!selectedCustomerRollId && rolls[0]) {
@@ -319,14 +331,14 @@ const refreshCustomerQueues = async () => {
     ["Crating", STAGE_STATUS.crating],
     ["Delivery", STAGE_STATUS.delivery],
   ];
-  elements.customerStageQueues.innerHTML = "";
+  const rows = [];
   for (const [name, statuses] of stages) {
     const queue = await fetchStageQueue(statuses);
-    const li = document.createElement("li");
-    const preview = queue.slice(0, 5).map((r) => `${rollLabel(r)} (${r.mill_name})`).join(", ") || "No rolls";
-    li.textContent = `${name}: ${preview}`;
-    elements.customerStageQueues.appendChild(li);
+    queue.slice(0, 8).forEach((r, i) => {
+      rows.push([name, i + 1, r.roll_id, r.mill_name, r.roll_name ?? "--"]);
+    });
   }
+  renderTable(elements.customerStageQueues, ["SECTION", "POS", "ROLL ID", "MILL NAME", "ROLL NAME"], rows);
 };
 
 const refreshStationQueues = async () => {
@@ -422,6 +434,7 @@ elements.sendApproval?.addEventListener("click", async () => {
   if (!rollId) return showToast("Scan a roll barcode first.");
   try {
     await updateRoll(rollId, {
+      roll_name: elements.controllerRollName?.value.trim() || null,
       controller_notes: document.getElementById("controller-notes").value.trim() || null,
       diameter: Number(document.getElementById("controller-diameter").value) || null,
       visible_cracks: document.getElementById("controller-cracks").checked,
@@ -690,12 +703,8 @@ const init = async () => {
     if (elements.customerQueue) elements.customerQueue.textContent = await fetchQueueCount();
     if (elements.customerRollList) {
       const rolls = await fetchCustomerRolls();
-      elements.customerRollList.innerHTML = "";
-      rolls.forEach((roll) => {
-        const li = document.createElement("li");
-        li.textContent = `${rollLabel(roll)} — ${roll.mill_name} — ${roll.status}`;
-        elements.customerRollList.appendChild(li);
-      });
+      const rows = rolls.map((roll) => [roll.roll_id, roll.mill_name, roll.roll_name ?? "--", roll.status]);
+      renderTable(elements.customerRollList, ["ROLL ID", "MILL NAME", "ROLL NAME", "STATUS"], rows);
     }
     await refreshCustomerApprovalList();
     await refreshCustomerQueues();
