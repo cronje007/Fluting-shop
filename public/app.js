@@ -35,31 +35,49 @@ const elements = {
   customerRollList: document.getElementById("customer-roll-list"),
   adminCreateCustomer: document.getElementById("admin-create-customer"),
   adminCreateEmployee: document.getElementById("admin-create-employee"),
+  grindingQueue: document.getElementById("grinding-queue"),
+  flutingQueue: document.getElementById("fluting-queue"),
+  frostingQueue: document.getElementById("frosting-queue"),
 };
 
 const page = document.body?.dataset.page;
+
+const STAGE_STATUS = {
+  grinding: ["APPROVED", "GRINDING"],
+  fluting: ["GRINDING_DONE", "FLUTING"],
+  frosting: ["GRINDING_DONE", "FROSTING"],
+};
 
 const showToast = (message) => {
   window.alert(message);
 };
 
+const sortQueue = (rows) =>
+  [...rows].sort((a, b) => {
+    const priorityA = a.priority === "A" ? 0 : 1;
+    const priorityB = b.priority === "A" ? 0 : 1;
+    if (priorityA !== priorityB) return priorityA - priorityB;
+    return new Date(a.checked_in_at).getTime() - new Date(b.checked_in_at).getTime();
+  });
+
 const fetchQueueCount = async () => {
-  const { error, count } = await supabase
-    .from("roll_queue")
-    .select("queue_position", { count: "exact", head: true });
+  const { data, error } = await supabase
+    .from("rolls")
+    .select("id")
+    .in("status", ["APPROVED", "GRINDING", "GRINDING_DONE", "FLUTING", "FROSTING", "FLUTING_DONE", "FROSTING_DONE", "CRATING_CHECKING", "READY_FOR_DELIVERY"]);
 
   if (error) {
     console.error(error);
     return 0;
   }
 
-  return count ?? 0;
+  return data?.length ?? 0;
 };
 
 const fetchRollById = async (rollId) => {
   const { data, error } = await supabase
     .from("rolls")
-    .select("roll_id,status,mill_name,rejected_note")
+    .select("id,roll_id,status,mill_name,rejected_note,fluting_required,frosting_required,priority,checked_in_at,fluting_specs,frosting_specs")
     .eq("roll_id", rollId)
     .single();
 
@@ -68,6 +86,55 @@ const fetchRollById = async (rollId) => {
   }
 
   return data;
+};
+
+const updateRoll = async (rollId, patch) => {
+  const { data, error } = await supabase
+    .from("rolls")
+    .update(patch)
+    .eq("roll_id", rollId)
+    .select("roll_id,status")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+};
+
+const fetchStageQueue = async (statuses) => {
+  const { data, error } = await supabase
+    .from("rolls")
+    .select("roll_id,status,priority,checked_in_at")
+    .in("status", statuses);
+
+  if (error) {
+    throw error;
+  }
+
+  return sortQueue(data ?? []);
+};
+
+const renderQueue = async (statuses, target) => {
+  if (!target) return;
+  try {
+    const queue = await fetchStageQueue(statuses);
+    target.innerHTML = "";
+    if (!queue.length) {
+      const li = document.createElement("li");
+      li.textContent = "No rolls in queue.";
+      target.appendChild(li);
+      return;
+    }
+    queue.forEach((roll, idx) => {
+      const li = document.createElement("li");
+      li.textContent = `${idx + 1}. ${roll.roll_id} — Priority ${roll.priority ?? "B"} — ${roll.status}`;
+      target.appendChild(li);
+    });
+  } catch (error) {
+    showToast(error.message);
+  }
 };
 
 const fetchMetrics = async () => {
@@ -108,6 +175,25 @@ const handleLogin = async (email, password) => {
   }
   showToast("Logged in. Loading dashboard...");
   return true;
+};
+
+const requireNextQueueRoll = async (rollId, queueStatuses, expectedStatus) => {
+  const queue = await fetchStageQueue(queueStatuses);
+  if (!queue.length) {
+    throw new Error("No rolls are currently eligible in this queue.");
+  }
+
+  const next = queue[0];
+  if (next.roll_id !== rollId) {
+    throw new Error(`Roll ${rollId} is not next. Next eligible is ${next.roll_id}.`);
+  }
+
+  const current = await fetchRollById(rollId);
+  if (current.status !== expectedStatus) {
+    throw new Error(`Roll ${rollId} must be ${expectedStatus} to start this stage.`);
+  }
+
+  return current;
 };
 
 elements.customerLogin?.addEventListener("click", async () => {
@@ -151,6 +237,7 @@ elements.createRoll?.addEventListener("click", async () => {
     date_received: document.getElementById("checkin-date").value,
     fluting_required: document.getElementById("checkin-fluting").checked,
     frosting_required: document.getElementById("checkin-frosting").checked,
+    status: "CHECKED_IN",
   };
 
   const { error } = await supabase.from("rolls").insert(payload);
@@ -161,60 +248,252 @@ elements.createRoll?.addEventListener("click", async () => {
   showToast("Roll created in CHECKED_IN status.");
 });
 
-// Controller approval request (email should be triggered from Edge Function)
+// Controller
 
-elements.sendApproval?.addEventListener("click", () => {
-  showToast("Approval request queued. Trigger your email function here.");
+elements.sendApproval?.addEventListener("click", async () => {
+  const rollId = document.getElementById("controller-scan").value.trim();
+  if (!rollId) {
+    showToast("Scan a roll barcode first.");
+    return;
+  }
+
+  const patch = {
+    controller_notes: document.getElementById("controller-notes").value.trim() || null,
+    diameter: Number(document.getElementById("controller-diameter").value) || null,
+    visible_cracks: document.getElementById("controller-cracks").checked,
+    cracks_notes: document.getElementById("controller-crack-notes").value.trim() || null,
+    price_quote: Number(document.getElementById("controller-quote").value) || null,
+    fluting_specs: document.getElementById("controller-fluting").value.trim() || null,
+    frosting_specs: document.getElementById("controller-frosting").value.trim() || null,
+    status: "AWAITING_CUSTOMER_APPROVAL",
+  };
+
+  try {
+    await updateRoll(rollId, patch);
+    showToast("Roll moved to AWAITING_CUSTOMER_APPROVAL. Send email via Edge Function.");
+  } catch (error) {
+    showToast(error.message);
+  }
 });
 
 // Customer approvals
 
-elements.approveRoll?.addEventListener("click", () => {
-  showToast("Roll approved. Update status to APPROVED.");
+elements.approveRoll?.addEventListener("click", async () => {
+  const rollId = document.getElementById("customer-roll-id")?.value.trim();
+  const priority = document.getElementById("customer-priority")?.value;
+  if (!rollId || !priority) {
+    showToast("Roll ID and priority are required.");
+    return;
+  }
+  try {
+    const current = await fetchRollById(rollId);
+    if (current.status !== "AWAITING_CUSTOMER_APPROVAL") {
+      throw new Error("Roll is not awaiting customer approval.");
+    }
+    await updateRoll(rollId, { priority, status: "APPROVED", rejected_note: null, approved_at: new Date().toISOString() });
+    showToast("Roll approved and sent to production queue.");
+    if (page === "customer") {
+      init();
+    }
+  } catch (error) {
+    showToast(error.message);
+  }
 });
 
-elements.rejectIncorrect?.addEventListener("click", () => {
-  showToast("Roll rejected for incorrect info. Capture note + set REJECTED.");
+elements.rejectIncorrect?.addEventListener("click", async () => {
+  const rollId = document.getElementById("customer-roll-id")?.value.trim();
+  const note = document.getElementById("customer-reject-note")?.value.trim();
+  if (!rollId || !note) {
+    showToast("Roll ID and rejection note are required.");
+    return;
+  }
+
+  try {
+    await updateRoll(rollId, { status: "REJECTED", rejected_note: note });
+    showToast("Roll moved to REJECTED and returned to controller.");
+  } catch (error) {
+    showToast(error.message);
+  }
 });
 
-elements.rejectScrap?.addEventListener("click", () => {
-  showToast("Scrap roll confirmed twice. Set status to SCRAPPED.");
+elements.rejectScrap?.addEventListener("click", async () => {
+  const rollId = document.getElementById("customer-roll-id")?.value.trim();
+  if (!rollId) {
+    showToast("Roll ID is required.");
+    return;
+  }
+
+  const firstConfirm = window.confirm("Are you sure you want to SCRAP this roll?");
+  if (!firstConfirm) return;
+  const secondConfirm = window.confirm("Final confirmation: this is permanent. Scrap roll?");
+  if (!secondConfirm) return;
+
+  try {
+    await updateRoll(rollId, { status: "SCRAPPED", scrapped_at: new Date().toISOString() });
+    showToast("Roll status set to SCRAPPED (final).");
+  } catch (error) {
+    showToast(error.message);
+  }
 });
 
 // Queue actions
 
-elements.grindingNew?.addEventListener("click", () => {
-  showToast("Scan barcode to start GRINDING. Validate FIFO + priority.");
+elements.grindingNew?.addEventListener("click", async () => {
+  const rollId = document.getElementById("grinding-scan")?.value.trim();
+  if (!rollId) {
+    showToast("Scan a barcode into Roll ID first.");
+    return;
+  }
+
+  try {
+    await requireNextQueueRoll(rollId, ["APPROVED"], "APPROVED");
+    await updateRoll(rollId, { status: "GRINDING" });
+    showToast("Roll checked in at GRINDING.");
+    renderQueue(STAGE_STATUS.grinding, elements.grindingQueue);
+  } catch (error) {
+    showToast(error.message);
+  }
 });
 
-elements.grindingDone?.addEventListener("click", () => {
-  showToast("Scan barcode to set GRINDING_DONE.");
+elements.grindingDone?.addEventListener("click", async () => {
+  const rollId = document.getElementById("grinding-scan")?.value.trim();
+  if (!rollId) {
+    showToast("Scan a barcode into Roll ID first.");
+    return;
+  }
+
+  try {
+    const roll = await fetchRollById(rollId);
+    if (roll.status !== "GRINDING") {
+      throw new Error("Roll must be in GRINDING before marking done.");
+    }
+    await updateRoll(rollId, { status: "GRINDING_DONE" });
+    showToast("Roll moved to GRINDING_DONE.");
+    renderQueue(STAGE_STATUS.grinding, elements.grindingQueue);
+  } catch (error) {
+    showToast(error.message);
+  }
 });
 
-elements.flutingAccept?.addEventListener("click", () => {
-  showToast("Fluting specs accepted. Set status to FLUTING.");
+elements.flutingAccept?.addEventListener("click", async () => {
+  const rollId = document.getElementById("fluting-scan")?.value.trim();
+  if (!rollId) {
+    showToast("Scan a barcode into Roll ID first.");
+    return;
+  }
+
+  try {
+    await requireNextQueueRoll(rollId, ["GRINDING_DONE"], "GRINDING_DONE");
+    const roll = await fetchRollById(rollId);
+    if (!roll.fluting_required) {
+      throw new Error("This roll does not require fluting.");
+    }
+    await updateRoll(rollId, { status: "FLUTING" });
+    showToast("Fluting specs accepted. Roll moved to FLUTING.");
+    renderQueue(STAGE_STATUS.fluting, elements.flutingQueue);
+  } catch (error) {
+    showToast(error.message);
+  }
 });
 
-elements.flutingDone?.addEventListener("click", () => {
-  showToast("Scan barcode to set FLUTING_DONE.");
+elements.flutingDone?.addEventListener("click", async () => {
+  const rollId = document.getElementById("fluting-scan")?.value.trim();
+  if (!rollId) {
+    showToast("Scan a barcode into Roll ID first.");
+    return;
+  }
+
+  try {
+    const roll = await fetchRollById(rollId);
+    if (roll.status !== "FLUTING") {
+      throw new Error("Roll must be FLUTING before done.");
+    }
+    await updateRoll(rollId, { status: "FLUTING_DONE" });
+    showToast("Roll moved to FLUTING_DONE.");
+    renderQueue(STAGE_STATUS.fluting, elements.flutingQueue);
+  } catch (error) {
+    showToast(error.message);
+  }
 });
 
-elements.frostingAccept?.addEventListener("click", () => {
-  showToast("Frosting specs accepted. Set status to FROSTING.");
+elements.frostingAccept?.addEventListener("click", async () => {
+  const rollId = document.getElementById("frosting-scan")?.value.trim();
+  if (!rollId) {
+    showToast("Scan a barcode into Roll ID first.");
+    return;
+  }
+
+  try {
+    await requireNextQueueRoll(rollId, ["GRINDING_DONE"], "GRINDING_DONE");
+    const roll = await fetchRollById(rollId);
+    if (!roll.frosting_required) {
+      throw new Error("This roll does not require frosting.");
+    }
+    await updateRoll(rollId, { status: "FROSTING" });
+    showToast("Frosting specs accepted. Roll moved to FROSTING.");
+    renderQueue(STAGE_STATUS.frosting, elements.frostingQueue);
+  } catch (error) {
+    showToast(error.message);
+  }
 });
 
-elements.frostingDone?.addEventListener("click", () => {
-  showToast("Scan barcode to set FROSTING_DONE.");
+elements.frostingDone?.addEventListener("click", async () => {
+  const rollId = document.getElementById("frosting-scan")?.value.trim();
+  if (!rollId) {
+    showToast("Scan a barcode into Roll ID first.");
+    return;
+  }
+
+  try {
+    const roll = await fetchRollById(rollId);
+    if (roll.status !== "FROSTING") {
+      throw new Error("Roll must be FROSTING before done.");
+    }
+    await updateRoll(rollId, { status: "FROSTING_DONE" });
+    showToast("Roll moved to FROSTING_DONE.");
+    renderQueue(STAGE_STATUS.frosting, elements.frostingQueue);
+  } catch (error) {
+    showToast(error.message);
+  }
 });
 
 // Crating & delivery
 
-elements.cratingReady?.addEventListener("click", () => {
-  showToast("Mark READY_FOR_DELIVERY and send email notification.");
+elements.cratingReady?.addEventListener("click", async () => {
+  const rollId = document.getElementById("crating-scan")?.value.trim();
+  if (!rollId) {
+    showToast("Scan a barcode into Roll ID first.");
+    return;
+  }
+  try {
+    const roll = await fetchRollById(rollId);
+    const allowed = ["GRINDING_DONE", "FLUTING_DONE", "FROSTING_DONE", "CRATING_CHECKING"];
+    if (!allowed.includes(roll.status)) {
+      throw new Error(`Roll status ${roll.status} cannot be moved to READY_FOR_DELIVERY.`);
+    }
+    await updateRoll(rollId, { status: "READY_FOR_DELIVERY" });
+    showToast("Marked READY_FOR_DELIVERY. Trigger delivery-ready email in Edge Function.");
+  } catch (error) {
+    showToast(error.message);
+  }
 });
 
-elements.deliveryDone?.addEventListener("click", () => {
-  showToast("Mark DELIVERED.");
+elements.deliveryDone?.addEventListener("click", async () => {
+  const rollId = document.getElementById("delivery-scan")?.value.trim();
+  if (!rollId) {
+    showToast("Scan a barcode into Roll ID first.");
+    return;
+  }
+  try {
+    const roll = await fetchRollById(rollId);
+    if (roll.status !== "READY_FOR_DELIVERY") {
+      throw new Error("Roll must be READY_FOR_DELIVERY before DELIVERED.");
+    }
+    await updateRoll(rollId, { status: "DELIVERED", delivered_at: new Date().toISOString() });
+    showToast("Roll marked DELIVERED.");
+  } catch (error) {
+    showToast(error.message);
+  }
 });
 
 // Admin tracking
@@ -313,6 +592,18 @@ const init = async () => {
     } catch (error) {
       showToast(error.message);
     }
+  }
+
+  if (page === "grinding") {
+    await renderQueue(STAGE_STATUS.grinding, elements.grindingQueue);
+  }
+
+  if (page === "fluting") {
+    await renderQueue(STAGE_STATUS.fluting, elements.flutingQueue);
+  }
+
+  if (page === "frosting") {
+    await renderQueue(STAGE_STATUS.frosting, elements.frostingQueue);
   }
 
   if (page === "admin" && elements.metricAverage && elements.metricLongest) {

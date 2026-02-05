@@ -48,3 +48,59 @@ create trigger rolls_set_customer_id
 before insert on rolls
 for each row
 execute function set_roll_customer_id();
+
+create or replace function enforce_roll_status_transition()
+returns trigger as $$
+declare
+  allowed boolean := false;
+begin
+  if new.status = old.status then
+    return new;
+  end if;
+
+  allowed := (
+    (old.status = 'CHECKED_IN' and new.status = 'AWAITING_CUSTOMER_APPROVAL')
+    or (old.status = 'AWAITING_CUSTOMER_APPROVAL' and new.status in ('APPROVED', 'REJECTED', 'SCRAPPED'))
+    or (old.status = 'REJECTED' and new.status = 'AWAITING_CUSTOMER_APPROVAL')
+    or (old.status = 'APPROVED' and new.status = 'GRINDING')
+    or (old.status = 'GRINDING' and new.status = 'GRINDING_DONE')
+    or (old.status = 'GRINDING_DONE' and new.status in ('FLUTING', 'FROSTING', 'CRATING_CHECKING'))
+    or (old.status = 'FLUTING' and new.status = 'FLUTING_DONE')
+    or (old.status = 'FROSTING' and new.status = 'FROSTING_DONE')
+    or (old.status in ('FLUTING_DONE', 'FROSTING_DONE', 'CRATING_CHECKING') and new.status = 'READY_FOR_DELIVERY')
+    or (old.status = 'READY_FOR_DELIVERY' and new.status = 'DELIVERED')
+  );
+
+  if old.status = 'SCRAPPED' then
+    raise exception 'SCRAPPED rolls are final and cannot move to %', new.status;
+  end if;
+
+  if old.status = 'DELIVERED' then
+    raise exception 'DELIVERED rolls are final and cannot move to %', new.status;
+  end if;
+
+  if not allowed then
+    raise exception 'Invalid roll status transition: % -> %', old.status, new.status;
+  end if;
+
+  if new.status = 'APPROVED' and new.approved_at is null then
+    new.approved_at := now();
+  end if;
+
+  if new.status = 'SCRAPPED' and new.scrapped_at is null then
+    new.scrapped_at := now();
+  end if;
+
+  if new.status = 'DELIVERED' and new.delivered_at is null then
+    new.delivered_at := now();
+  end if;
+
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists rolls_enforce_status_transition on rolls;
+create trigger rolls_enforce_status_transition
+before update of status on rolls
+for each row
+execute function enforce_roll_status_transition();
