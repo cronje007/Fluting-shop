@@ -111,6 +111,15 @@ create policy "Employees can update rolls"
     is_admin() or current_employee_role() is not null
   );
 
+
+create policy "Customers can update approval decisions"
+  on rolls for update
+  using (customer_id = current_customer_id() and status = 'AWAITING_CUSTOMER_APPROVAL')
+  with check (
+    customer_id = current_customer_id()
+    and status in ('APPROVED', 'REJECTED', 'SCRAPPED')
+  );
+
 -- Roll files policies
 create policy "Customers can view their files"
   on roll_files for select
