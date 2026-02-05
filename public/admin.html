@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="admin">
+  <header class="site-header">
+    <div class="header-brand">
+      <img src="MSS.svg" alt="MSS logo" class="logo" />
+      <div>
+        <h1>Admin</h1>
+        <p class="subtitle">Manage customers, track rolls, and review analytics</p>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Roll Tracking</h2>
+      <div class="panel">
+        <label>Track Roll ID <input id="admin-roll-id" /></label>
+        <button id="admin-track">Track Roll</button>
+        <div class="info-box" id="admin-roll-details">Status details appear here.</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Customer Views</h2>
+      <div class="panel">
+        <label>Customer (Mill Name) <input id="admin-customer" /></label>
+        <button id="admin-view-customer">View Customer Dashboard</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>User Management</h2>
+      <div class="panel">
+        <h3>Create Customer Profile</h3>
+        <label>Mill Name <input id="admin-customer-mill" /></label>
+        <label>Customer Email <input id="admin-customer-email" type="email" /></label>
+        <label>Auth User ID <input id="admin-customer-auth" /></label>
+        <button id="admin-create-customer">Create Customer</button>
+      </div>
+      <div class="panel">
+        <h3>Create Employee Profile</h3>
+        <label>Role
+          <select id="admin-employee-role">
+            <option value="ROLL_CHECKIN">Roll Check-in</option>
+            <option value="CONTROLLER">Controller</option>
+            <option value="GRINDING">Grinding</option>
+            <option value="FLUTING">Fluting</option>
+            <option value="FROSTING">Frosting</option>
+            <option value="CRATING_CHECKING">Crating &amp; Checking</option>
+            <option value="DELIVERY">Delivery</option>
+            <option value="ADMIN">Admin</option>
+          </select>
+        </label>
+        <label>Display Name <input id="admin-employee-name" /></label>
+        <label>Auth User ID <input id="admin-employee-auth" /></label>
+        <button id="admin-create-employee">Create Employee</button>
+      </div>
+      <p class="helper">Auth users must already exist in Supabase Auth.</p>
+    </section>
+
+    <section class="card">
+      <h2>Analytics</h2>
+      <div class="panel">
+        <p>Average turnaround time: <span id="metric-average">--</span></p>
+        <p>Longest turnaround: <span id="metric-longest">--</span></p>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
