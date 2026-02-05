@@ -21,7 +21,11 @@
     <section class="card">
       <h2>New Roll</h2>
       <div class="panel">
-        <label>Roll ID <input id="checkin-roll-id" /></label>
+        <label>Roll ID <input id="checkin-roll-id" placeholder="Type ID or use Generate New Unique ID" /></label>
+        <div class="button-row">
+          <button id="checkin-generate-id" type="button">Generate New Unique ID</button>
+        </div>
+        <label>Roll Name <input id="checkin-roll-name" placeholder="e.g. B1" /></label>
         <label>Mill Name <input id="checkin-mill" /></label>
         <label>Date Received <input type="date" id="checkin-date" /></label>
         <label>

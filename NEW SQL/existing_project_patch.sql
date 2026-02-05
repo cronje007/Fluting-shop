@@ -1,54 +1,24 @@
-create or replace function log_roll_status_change()
-returns trigger as $$
-begin
-  if new.status is distinct from old.status then
-    insert into roll_history (
-      roll_id,
-      from_status,
-      to_status,
-      note,
-      actor_role,
-      actor_user_id
-    ) values (
-      new.id,
-      old.status,
-      new.status,
-      coalesce(new.rejected_note, null),
-      null,
-      auth.uid()
-    );
-  end if;
-  return new;
-end;
-$$ language plpgsql security definer;
+-- Fluting Shop: single-section SQL patch for EXISTING projects
+-- Safe to run on an already-created database.
 
-create trigger rolls_log_status_change
-after update of status on rolls
-for each row
-execute function log_roll_status_change();
+begin;
 
-create or replace function set_roll_customer_id()
-returns trigger as $$
-begin
-  if new.customer_id is null then
-    select id into new.customer_id
-    from customers
-    where mill_name = new.mill_name;
-  end if;
 
-  if new.customer_id is null then
-    raise exception 'Customer not found for mill_name %', new.mill_name;
-  end if;
+-- Roll ID settings for generated unique IDs
+create table if not exists roll_id_settings (
+  id integer primary key default 1 check (id = 1),
+  next_value bigint not null default 1000,
+  prefix text not null default 'R'
+);
 
-  return new;
-end;
-$$ language plpgsql security definer;
+insert into roll_id_settings (id, next_value, prefix)
+values (1, 1000, 'R')
+on conflict (id) do nothing;
 
-create trigger rolls_set_customer_id
-before insert on rolls
-for each row
-execute function set_roll_customer_id();
+alter table rolls
+  add column if not exists roll_name text;
 
+-- 1) Workflow transition enforcement
 create or replace function enforce_roll_status_transition()
 returns trigger as $$
 declare
@@ -104,6 +74,81 @@ create trigger rolls_enforce_status_transition
 before update of status on rolls
 for each row
 execute function enforce_roll_status_transition();
+
+-- 2) Keep history logging trigger in place
+create or replace function log_roll_status_change()
+returns trigger as $$
+begin
+  if new.status is distinct from old.status then
+    insert into roll_history (
+      roll_id,
+      from_status,
+      to_status,
+      note,
+      actor_role,
+      actor_user_id
+    ) values (
+      new.id,
+      old.status,
+      new.status,
+      coalesce(new.rejected_note, null),
+      null,
+      auth.uid()
+    );
+  end if;
+  return new;
+end;
+$$ language plpgsql security definer;
+
+drop trigger if exists rolls_log_status_change on rolls;
+create trigger rolls_log_status_change
+after update of status on rolls
+for each row
+execute function log_roll_status_change();
+
+-- 3) RLS helpers (idempotent)
+create or replace function current_employee_role()
+returns employee_role as $$
+  select role from employees where auth_user_id = auth.uid();
+$$ language sql stable security definer;
+
+create or replace function current_customer_id()
+returns uuid as $$
+  select id from customers where auth_user_id = auth.uid();
+$$ language sql stable security definer;
+
+create or replace function is_admin()
+returns boolean as $$
+  select exists (
+    select 1 from employees
+    where auth_user_id = auth.uid()
+      and role = 'ADMIN'
+  );
+$$ language sql stable security definer;
+
+-- 4) Ensure RLS is on
+alter table customers enable row level security;
+alter table employees enable row level security;
+alter table rolls enable row level security;
+alter table roll_files enable row level security;
+alter table roll_history enable row level security;
+
+-- 5) Replace key roll policies to avoid duplicates/conflicts
+-- Existing installations may already have these names.
+drop policy if exists "Employees can update rolls" on rolls;
+create policy "Employees can update rolls"
+  on rolls for update
+  using (is_admin() or current_employee_role() is not null)
+  with check (is_admin() or current_employee_role() is not null);
+
+drop policy if exists "Customers can update approval decisions" on rolls;
+create policy "Customers can update approval decisions"
+  on rolls for update
+  using (customer_id = current_customer_id() and status = 'AWAITING_CUSTOMER_APPROVAL')
+  with check (
+    customer_id = current_customer_id()
+    and status in ('APPROVED', 'REJECTED', 'SCRAPPED')
+  );
 
 
 create or replace function next_roll_id()
@@ -161,3 +206,5 @@ create or replace function get_current_roll_id_counter()
 returns bigint as $$
   select next_value from roll_id_settings where id = 1;
 $$ language sql stable security definer;
+
+commit;
