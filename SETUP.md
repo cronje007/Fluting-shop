@@ -89,3 +89,5 @@ This single script includes transition trigger enforcement + status-history trig
 - Admin can set the next generated roll number from the Admin dashboard.
 - Roll Check-in can click **Generate New Unique ID** to get the next ID from SQL function `next_roll_id()` (auto increments).
 - If a typed Roll ID already exists, check-in is prompted to create a rework ID (`<ROLL_ID>-R1`, `-R2`, ...).
+
+- Rolls now support optional `roll_name` (e.g. `B1`) shown alongside unique `roll_id` across queues.

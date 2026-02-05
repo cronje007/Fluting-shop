@@ -15,6 +15,9 @@ insert into roll_id_settings (id, next_value, prefix)
 values (1, 1000, 'R')
 on conflict (id) do nothing;
 
+alter table rolls
+  add column if not exists roll_name text;
+
 -- 1) Workflow transition enforcement
 create or replace function enforce_roll_status_transition()
 returns trigger as $$

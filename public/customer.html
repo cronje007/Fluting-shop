@@ -24,9 +24,16 @@
     </section>
 
     <section class="card">
-      <h2>Approval Needed</h2>
+      <h2>Rolls Waiting for Your Approval</h2>
       <div class="panel">
-        <label>Roll ID <input id="customer-roll-id" placeholder="Scan or enter Roll ID" /></label>
+        <ul class="roll-list" id="customer-awaiting-list"></ul>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Selected Roll Details</h2>
+      <div class="panel">
+        <div class="info-box" id="customer-roll-details">Click a roll above, then review details and approve/reject.</div>
         <label>Priority
           <select id="customer-priority">
             <option value="A">Priority A</option>
@@ -42,7 +49,6 @@
         <p class="helper">Scrap requires double confirmation before status becomes SCRAPPED.</p>
       </div>
     </section>
-
 
     <section class="card">
       <h2>Live Production Queues</h2>

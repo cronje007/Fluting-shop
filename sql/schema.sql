@@ -51,6 +51,7 @@ create table employees (
 create table rolls (
   id uuid primary key default gen_random_uuid(),
   roll_id text not null unique,
+  roll_name text,
   customer_id uuid not null references customers(id) on delete restrict,
   mill_name text not null,
   date_received date not null,

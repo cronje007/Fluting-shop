@@ -5,6 +5,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_DRmpAmFFMNmAOPM0ZglN7g_-EHX5jNd";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const page = document.body?.dataset.page;
+let selectedCustomerRollId = null;
 
 const elements = {
   customerLogin: document.getElementById("customer-login"),
@@ -13,11 +14,14 @@ const elements = {
   printBarcode: document.getElementById("print-barcode"),
   barcodeSvg: document.getElementById("barcode"),
   checkinRollId: document.getElementById("checkin-roll-id"),
+  checkinRollName: document.getElementById("checkin-roll-name"),
   checkinGenerateId: document.getElementById("checkin-generate-id"),
   createRoll: document.getElementById("create-roll"),
   sendApproval: document.getElementById("send-approval"),
   customerQueue: document.getElementById("customer-queue"),
   customerStageQueues: document.getElementById("customer-stage-queues"),
+  customerAwaitingList: document.getElementById("customer-awaiting-list"),
+  customerRollDetails: document.getElementById("customer-roll-details"),
   approveRoll: document.getElementById("approve-roll"),
   rejectIncorrect: document.getElementById("reject-incorrect"),
   rejectScrap: document.getElementById("reject-scrap"),
@@ -68,10 +72,12 @@ const sortQueue = (rows) =>
     return new Date(a.checked_in_at).getTime() - new Date(b.checked_in_at).getTime();
   });
 
+const rollLabel = (roll) => `${roll.roll_name ?? roll.roll_id} [${roll.roll_id}]`;
+
 const fetchRollById = async (rollId) => {
   const { data, error } = await supabase
     .from("rolls")
-    .select("id,roll_id,status,mill_name,rejected_note,fluting_required,frosting_required,priority,checked_in_at,fluting_specs,frosting_specs")
+    .select("id,roll_id,roll_name,status,mill_name,rejected_note,fluting_required,frosting_required,priority,checked_in_at,controller_notes,diameter,visible_cracks,cracks_notes,price_quote,fluting_specs,frosting_specs")
     .eq("roll_id", rollId)
     .maybeSingle();
   if (error) throw error;
@@ -86,7 +92,7 @@ const updateRoll = async (rollId, patch) => {
 const fetchStageQueue = async (statuses) => {
   const { data, error } = await supabase
     .from("rolls")
-    .select("roll_id,mill_name,status,priority,checked_in_at,fluting_specs,frosting_specs")
+    .select("roll_id,roll_name,mill_name,status,priority,checked_in_at,fluting_specs,frosting_specs")
     .in("status", statuses);
   if (error) throw error;
   return sortQueue(data ?? []);
@@ -104,7 +110,7 @@ const renderQueue = async (statuses, target, onSelect) => {
   }
   queue.forEach((roll, idx) => {
     const li = document.createElement("li");
-    li.textContent = `${idx + 1}. ${roll.roll_id} — ${roll.mill_name} — Priority ${roll.priority ?? "B"} — ${roll.status}`;
+    li.textContent = `${idx + 1}. ${rollLabel(roll)} — ${roll.mill_name} — Priority ${roll.priority ?? "B"} — ${roll.status}`;
     if (onSelect) {
       li.style.cursor = "pointer";
       li.addEventListener("click", () => onSelect(roll));
@@ -124,7 +130,20 @@ const requireNextQueueRoll = async (rollId, statuses, expected) => {
 };
 
 const fetchCustomerRolls = async () => {
-  const { data, error } = await supabase.from("rolls").select("roll_id,mill_name,status,checked_in_at").order("checked_in_at", { ascending: true });
+  const { data, error } = await supabase
+    .from("rolls")
+    .select("roll_id,roll_name,mill_name,status,checked_in_at")
+    .order("checked_in_at", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+};
+
+const fetchAwaitingCustomerRolls = async () => {
+  const { data, error } = await supabase
+    .from("rolls")
+    .select("roll_id,roll_name,mill_name,status,checked_in_at,controller_notes,diameter,visible_cracks,cracks_notes,price_quote,fluting_specs,frosting_specs")
+    .eq("status", "AWAITING_CUSTOMER_APPROVAL")
+    .order("checked_in_at", { ascending: true });
   if (error) throw error;
   return data ?? [];
 };
@@ -175,6 +194,63 @@ const getReworkRollId = async (baseRollId) => {
   return `${baseRollId}-R${next}`;
 };
 
+const renderCustomerSelectedRollDetails = (roll) => {
+  if (!elements.customerRollDetails) return;
+  if (!roll) {
+    elements.customerRollDetails.textContent = "Click a roll above, then review details and approve/reject.";
+    return;
+  }
+
+  elements.customerRollDetails.innerHTML = `
+    <strong>${rollLabel(roll)} — ${roll.mill_name}</strong><br/>
+    Status: ${roll.status}<br/>
+    Diameter: ${roll.diameter ?? "--"}<br/>
+    Visible Cracks: ${roll.visible_cracks === null ? "--" : roll.visible_cracks ? "Yes" : "No"}<br/>
+    Cracks Notes: ${roll.cracks_notes ?? "--"}<br/>
+    Controller Notes: ${roll.controller_notes ?? "--"}<br/>
+    Price Quote: ${roll.price_quote ?? "--"}<br/>
+    Fluting Specs: ${roll.fluting_specs ?? "--"}<br/>
+    Frosting Specs: ${roll.frosting_specs ?? "--"}
+  `;
+};
+
+const refreshCustomerApprovalList = async () => {
+  if (!elements.customerAwaitingList) return;
+  const rolls = await fetchAwaitingCustomerRolls();
+  elements.customerAwaitingList.innerHTML = "";
+
+  if (!rolls.length) {
+    const li = document.createElement("li");
+    li.textContent = "No rolls waiting for approval.";
+    elements.customerAwaitingList.appendChild(li);
+    selectedCustomerRollId = null;
+    renderCustomerSelectedRollDetails(null);
+    return;
+  }
+
+  rolls.forEach((roll) => {
+    const li = document.createElement("li");
+    li.textContent = `${rollLabel(roll)} — ${roll.mill_name} `;
+
+    const btn = document.createElement("button");
+    btn.textContent = "Show Roll Details";
+    btn.type = "button";
+    btn.addEventListener("click", () => {
+      selectedCustomerRollId = roll.roll_id;
+      renderCustomerSelectedRollDetails(roll);
+    });
+
+    li.appendChild(document.createTextNode(" "));
+    li.appendChild(btn);
+    elements.customerAwaitingList.appendChild(li);
+  });
+
+  if (!selectedCustomerRollId && rolls[0]) {
+    selectedCustomerRollId = rolls[0].roll_id;
+    renderCustomerSelectedRollDetails(rolls[0]);
+  }
+};
+
 const refreshCustomerQueues = async () => {
   if (!elements.customerStageQueues) return;
   const stages = [
@@ -189,7 +265,7 @@ const refreshCustomerQueues = async () => {
   for (const [name, statuses] of stages) {
     const queue = await fetchStageQueue(statuses);
     const li = document.createElement("li");
-    const preview = queue.slice(0, 5).map((r) => `${r.roll_id} (${r.mill_name})`).join(", ") || "No rolls";
+    const preview = queue.slice(0, 5).map((r) => `${rollLabel(r)} (${r.mill_name})`).join(", ") || "No rolls";
     li.textContent = `${name}: ${preview}`;
     elements.customerStageQueues.appendChild(li);
   }
@@ -214,6 +290,11 @@ const refreshStationQueues = async () => {
     renderQueue(STAGE_STATUS.crating, elements.cratingQueue),
     renderQueue(STAGE_STATUS.delivery, elements.deliveryQueue),
   ]);
+};
+
+const getSelectedCustomerRollId = () => {
+  if (selectedCustomerRollId) return selectedCustomerRollId;
+  throw new Error("Please click 'Show Roll Details' for a roll first.");
 };
 
 // Login
@@ -260,6 +341,7 @@ elements.createRoll?.addEventListener("click", async () => {
 
     const payload = {
       roll_id: rollId,
+      roll_name: elements.checkinRollName?.value.trim() || null,
       mill_name: document.getElementById("checkin-mill").value.trim(),
       date_received: document.getElementById("checkin-date").value,
       fluting_required: document.getElementById("checkin-fluting").checked,
@@ -300,10 +382,9 @@ elements.sendApproval?.addEventListener("click", async () => {
 
 // Customer
 elements.approveRoll?.addEventListener("click", async () => {
-  const rollId = document.getElementById("customer-roll-id")?.value.trim();
   const priority = document.getElementById("customer-priority")?.value;
-  if (!rollId) return showToast("Roll ID required.");
   try {
+    const rollId = getSelectedCustomerRollId();
     await updateRoll(rollId, { priority, status: "APPROVED", rejected_note: null, approved_at: new Date().toISOString() });
     showToast("Roll approved.");
     await init();
@@ -313,10 +394,10 @@ elements.approveRoll?.addEventListener("click", async () => {
 });
 
 elements.rejectIncorrect?.addEventListener("click", async () => {
-  const rollId = document.getElementById("customer-roll-id")?.value.trim();
   const note = document.getElementById("customer-reject-note")?.value.trim();
-  if (!rollId || !note) return showToast("Roll ID and note required.");
+  if (!note) return showToast("Please enter incorrect info note.");
   try {
+    const rollId = getSelectedCustomerRollId();
     await updateRoll(rollId, { status: "REJECTED", rejected_note: note });
     showToast("Roll rejected for incorrect info.");
     await init();
@@ -326,11 +407,10 @@ elements.rejectIncorrect?.addEventListener("click", async () => {
 });
 
 elements.rejectScrap?.addEventListener("click", async () => {
-  const rollId = document.getElementById("customer-roll-id")?.value.trim();
-  if (!rollId) return showToast("Roll ID required.");
   if (!window.confirm("Confirm scrap roll?")) return;
   if (!window.confirm("Final confirm: scrap permanently?")) return;
   try {
+    const rollId = getSelectedCustomerRollId();
     await updateRoll(rollId, { status: "SCRAPPED", scrapped_at: new Date().toISOString() });
     showToast("Roll set to SCRAPPED.");
     await init();
@@ -389,8 +469,7 @@ elements.flutingAccept?.addEventListener("click", async () => {
   try {
     const roll = await requireNextQueueRoll(rollId, ["GRINDING_DONE"], "GRINDING_DONE");
     if (!roll.fluting_required) throw new Error("This roll does not require fluting.");
-    const text = roll.fluting_specs || "No fluting specs entered.";
-    if (!window.confirm(`Fluting Specs:\n\n${text}\n\nAccept and move roll to FLUTING?`)) return;
+    if (!window.confirm(`Fluting Specs:\n\n${roll.fluting_specs || "No fluting specs entered."}\n\nAccept and move roll to FLUTING?`)) return;
     await updateRoll(rollId, { status: "FLUTING" });
     showToast("Roll moved to FLUTING.");
     await refreshStationQueues();
@@ -419,8 +498,7 @@ elements.frostingAccept?.addEventListener("click", async () => {
   try {
     const roll = await requireNextQueueRoll(rollId, ["GRINDING_DONE"], "GRINDING_DONE");
     if (!roll.frosting_required) throw new Error("This roll does not require frosting.");
-    const text = roll.frosting_specs || "No frosting specs entered.";
-    if (!window.confirm(`Frosting Specs:\n\n${text}\n\nAccept and move roll to FROSTING?`)) return;
+    if (!window.confirm(`Frosting Specs:\n\n${roll.frosting_specs || "No frosting specs entered."}\n\nAccept and move roll to FROSTING?`)) return;
     await updateRoll(rollId, { status: "FROSTING" });
     showToast("Roll moved to FROSTING.");
     await refreshStationQueues();
@@ -481,7 +559,7 @@ elements.adminTrack?.addEventListener("click", async () => {
   try {
     const data = await fetchRollById(rollId);
     if (!data) throw new Error("Roll not found.");
-    elements.adminRollDetails.textContent = `Roll ${data.roll_id} (${data.mill_name}) is ${data.status}.`;
+    elements.adminRollDetails.textContent = `${rollLabel(data)} (${data.mill_name}) is ${data.status}.`;
   } catch (error) {
     showToast(error.message);
   }
@@ -513,7 +591,7 @@ elements.controllerLookupBtn?.addEventListener("click", async () => {
   try {
     const data = await fetchRollById(rollId);
     if (!data) throw new Error("Roll not found.");
-    elements.controllerStatus.textContent = `${data.status}: ${data.roll_id} (${data.mill_name}) ${data.rejected_note ?? ""}`;
+    elements.controllerStatus.textContent = `${data.status}: ${rollLabel(data)} (${data.mill_name}) ${data.rejected_note ?? ""}`;
   } catch (error) {
     showToast(error.message);
   }
@@ -557,10 +635,11 @@ const init = async () => {
       elements.customerRollList.innerHTML = "";
       rolls.forEach((roll) => {
         const li = document.createElement("li");
-        li.textContent = `${roll.roll_id} — ${roll.mill_name} — ${roll.status}`;
+        li.textContent = `${rollLabel(roll)} — ${roll.mill_name} — ${roll.status}`;
         elements.customerRollList.appendChild(li);
       });
     }
+    await refreshCustomerApprovalList();
     await refreshCustomerQueues();
   }
 
