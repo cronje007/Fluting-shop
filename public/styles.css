@@ -167,3 +167,25 @@ button.danger {
   border-radius: 8px;
   padding: 8px 12px;
 }
+
+.queue-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border: 1px solid #dfe4ee;
+}
+
+.queue-table th,
+.queue-table td {
+  border: 1px solid #dfe4ee;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.queue-table thead {
+  background: #eef1f7;
+}
+
+.queue-table tbody tr:hover {
+  background: #f7f9fe;
+}
